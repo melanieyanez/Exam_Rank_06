@@ -19,7 +19,7 @@ fd_set 				active, readyRead, readyWrite;
 int extract_message(char **buf, char **msg) //fonction du sujet
 {
 	char	*newbuf;
-	int	i;
+	int		i;
 
 	*msg = 0;
 	if (*buf == 0)
@@ -66,11 +66,11 @@ char *str_join(char *buf, char *add) //fonction du sujet
 
 void broadcast(int fd)
 {
-    for(int i = 0; i <= max_fd; i++)
-    {
-        if (FD_ISSET(i, &readyWrite) && i != fd)
-            send(i, bufWrite, strlen(bufWrite), 0);
-    }
+	for(int i = 0; i <= max_fd; i++)
+	{
+		if (FD_ISSET(i, &readyWrite) && i != fd)
+			send(i, bufWrite, strlen(bufWrite), 0);
+	}
 }
 
 int main(int argc, char **argv)
@@ -91,9 +91,9 @@ int main(int argc, char **argv)
 	}
 
 	memset(clients, 0, sizeof(clients));
-    FD_ZERO(&active);
-    FD_SET(server_socket, &active);
-    max_fd = server_socket;
+	FD_ZERO(&active);
+	FD_SET(server_socket, &active);
+	max_fd = server_socket;
 
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
@@ -105,7 +105,7 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-    if (listen(server_socket, 128) < 0)
+	if (listen(server_socket, 128) < 0)
 	{
 		write(2, "Fatal error\n", 12);
 		exit(1);
@@ -115,7 +115,7 @@ int main(int argc, char **argv)
 	{
 		readyRead = readyWrite = active;
 		if (select(max_fd + 1, &readyRead, &readyWrite, NULL, NULL) < 0)
-            continue;
+			continue;
 		for(int fd = 0; fd <= max_fd; fd++)
 		{
 			if (FD_ISSET(fd, &readyRead))
@@ -124,9 +124,9 @@ int main(int argc, char **argv)
 				{
 					int client_socket = accept(server_socket, NULL, NULL);
 					if (client_socket < 0)
-                        continue;
-                    if (client_socket > max_fd)
-                        max_fd = client_socket;
+						continue;
+					if (client_socket > max_fd)
+						max_fd = client_socket;
 					clients[client_socket].id = next_id++;
 					clients[client_socket].msg = calloc(1, 424242);
 					FD_SET(client_socket, &active);
@@ -143,17 +143,17 @@ int main(int argc, char **argv)
 						broadcast(fd);
 						free(clients[fd].msg);
 						close(fd);
-                        FD_CLR(fd, &active);
+						FD_CLR(fd, &active);
 					}
 					else //message du client
 					{
 						bufRead[nbytes] = '\0';
-        				clients[fd].msg = str_join(clients[fd].msg, bufRead);
-        				while (extract_message(&clients[fd].msg, &new_msg_part) > 0)
+						clients[fd].msg = str_join(clients[fd].msg, bufRead);
+						while (extract_message(&clients[fd].msg, &new_msg_part) > 0)
 						{
-            				sprintf(bufWrite, "client %d: %s", clients[fd].id, new_msg_part);
-            				broadcast(fd);
-            				free(new_msg_part);
+							sprintf(bufWrite, "client %d: %s", clients[fd].id, new_msg_part);
+							broadcast(fd);
+							free(new_msg_part);
 						}
 					}
 				}
