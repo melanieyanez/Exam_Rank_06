@@ -9,14 +9,14 @@
 
 typedef struct client
 {
-	int		id;
-	char 	*msg;
+	int id;
+	char *msg;
 }t_client;
 
-t_client 	clients[1024];
-int			fd_max = 0, next_id = 0;
-char 		bufRead[424242], bufWrite[424242];
-fd_set 		active, readyRead, readyWrite;
+t_client clients[1024];
+char bufRead[424242], bufWrite[424242];
+int fd_max = 0, next_id = 0;
+fd_set active, readyRead, readyWrite;
 
 int extract_message(char **buf, char **msg)
 {
@@ -69,8 +69,8 @@ void broadcast(int fd)
 {
 	for (int i = 0; i <= fd_max; i++)
 	{
-		if (FD_ISSET(i, &readyWrite) &&  i != fd)
-			send(i, bufWrite, strlen(bufWrite), 0);
+		if (FD_ISSET(i, &readyWrite) && i != fd) //readyWrite
+			send(i, bufWrite, strlen(bufWrite), 0); //bufWrite
 	}
 }
 
@@ -81,10 +81,9 @@ int main(int argc, char **argv)
 		write(2, "Wrong number of arguments\n", 26);
 		exit(1);
 	}
-
 	int server_socket = socket(AF_INET, SOCK_STREAM, 0); 
 	if (server_socket == -1)
-	{
+	{ 
 		write(2, "Fatal error\n", 12);
 		exit(1); 
 	}
@@ -94,7 +93,7 @@ int main(int argc, char **argv)
 	FD_SET(server_socket, &active);
 	fd_max = server_socket;
 
-	struct sockaddr_in server_addr, client_addr; 
+	struct sockaddr_in server_addr, client_addr;
 	server_addr.sin_family = AF_INET; 
 	server_addr.sin_addr.s_addr = htonl(2130706433);
 	server_addr.sin_port = htons(atoi(argv[1]));
@@ -114,11 +113,11 @@ int main(int argc, char **argv)
 	while (42)
 	{
 		readyRead = readyWrite = active;
-		if (select(fd_max + 1, &readyRead, &readyWrite, NULL, NULL) < 0)
+		if (select(fd_max + 1, &readyRead, &readyWrite, NULL, NULL) < 0) //fd_max + 1
 			continue;
 		for (int fd = 0; fd <= fd_max; fd++)
 		{
-			if (FD_ISSET(fd, &readyRead))
+			if (FD_ISSET(fd, &readyRead)) //readyRead
 			{
 				if (fd == server_socket)
 				{
@@ -142,8 +141,8 @@ int main(int argc, char **argv)
 						sprintf(bufWrite, "server: client %d just left\n", clients[fd].id);
 						broadcast(fd);
 						free(clients[fd].msg);
-						FD_CLR(fd, &active);
 						close(fd);
+						FD_CLR(fd, &active);
 					}
 					else
 					{
@@ -151,13 +150,15 @@ int main(int argc, char **argv)
 						clients[fd].msg = str_join(clients[fd].msg, bufRead);
 						while (extract_message(&clients[fd].msg, &new_part_msg) > 0)
 						{
-							sprintf(bufWrite, "client %d: %s" , clients[fd].id, new_part_msg);
+							sprintf(bufWrite, "client %d: %s", clients[fd].id, new_part_msg);
 							broadcast(fd);
 							free(new_part_msg);
 						}
+
 					}
 				}
 			}
 		}
 	}
 }
+

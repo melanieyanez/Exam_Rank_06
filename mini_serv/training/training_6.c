@@ -10,18 +10,19 @@
 typedef struct client
 {
 	int		id;
-	char 	*msg;
+	char	*msg;
+
 }t_client;
 
 t_client 	clients[1024];
+char		bufRead[424242], bufWrite[424242];
 int			fd_max = 0, next_id = 0;
-char 		bufRead[424242], bufWrite[424242];
-fd_set 		active, readyRead, readyWrite;
+fd_set		active, readyRead, readyWrite;
 
 int extract_message(char **buf, char **msg)
 {
 	char	*newbuf;
-	int	i;
+	int		i;
 
 	*msg = 0;
 	if (*buf == 0)
@@ -69,7 +70,7 @@ void broadcast(int fd)
 {
 	for (int i = 0; i <= fd_max; i++)
 	{
-		if (FD_ISSET(i, &readyWrite) &&  i != fd)
+		if (FD_ISSET(i, &readyWrite) && i != fd)
 			send(i, bufWrite, strlen(bufWrite), 0);
 	}
 }
@@ -83,18 +84,18 @@ int main(int argc, char **argv)
 	}
 
 	int server_socket = socket(AF_INET, SOCK_STREAM, 0); 
-	if (server_socket == -1)
-	{
+	if (server_socket == -1) 
+	{ 
 		write(2, "Fatal error\n", 12);
 		exit(1); 
-	}
+	} 
 
 	memset(clients, 0, sizeof(clients));
 	FD_ZERO(&active);
 	FD_SET(server_socket, &active);
 	fd_max = server_socket;
 
-	struct sockaddr_in server_addr, client_addr; 
+	struct sockaddr_in server_addr, client_addr;
 	server_addr.sin_family = AF_INET; 
 	server_addr.sin_addr.s_addr = htonl(2130706433);
 	server_addr.sin_port = htons(atoi(argv[1]));
@@ -103,7 +104,7 @@ int main(int argc, char **argv)
 	{ 
 		write(2, "Fatal error\n", 12);
 		exit(1); 
-	}
+	} 
 
 	if (listen(server_socket, 128) != 0)
 	{
@@ -127,33 +128,33 @@ int main(int argc, char **argv)
 						continue;
 					if (client_socket > fd_max)
 						fd_max = client_socket;
+					FD_SET(client_socket, &active);
 					clients[client_socket].id = next_id++;
 					clients[client_socket].msg = calloc(1, 424242);
-					FD_SET(client_socket, &active);
 					sprintf(bufWrite, "server: client %d just arrived\n", clients[client_socket].id);
 					broadcast(client_socket);
 				}
 				else
 				{
-					char *new_part_msg = NULL;
+					char *new_msg_part = NULL;
 					int nbytes = recv(fd, bufRead, sizeof(bufRead), 0);
 					if (nbytes <= 0)
 					{
 						sprintf(bufWrite, "server: client %d just left\n", clients[fd].id);
 						broadcast(fd);
 						free(clients[fd].msg);
-						FD_CLR(fd, &active);
 						close(fd);
+						FD_CLR(fd, &active);
 					}
 					else
 					{
 						bufRead[nbytes] = '\0';
 						clients[fd].msg = str_join(clients[fd].msg, bufRead);
-						while (extract_message(&clients[fd].msg, &new_part_msg) > 0)
+						while(extract_message(&clients[fd].msg, &new_msg_part) > 0)
 						{
-							sprintf(bufWrite, "client %d: %s" , clients[fd].id, new_part_msg);
+							sprintf(bufWrite, "client %d: %s", clients[fd].id, new_msg_part);
 							broadcast(fd);
-							free(new_part_msg);
+							free(new_msg_part);
 						}
 					}
 				}
