@@ -44,11 +44,11 @@ void handleSignal(int sig)
     }
 }
 
-void handleClient(int client_sock)
+void handleClient(int client_socket)
 {
     char buffer[1024];
     std::string output;
-    if (recv(client_sock, buffer, sizeof(buffer), 0) > 0)
+    if (recv(client_socket, buffer, sizeof(buffer), 0) > 0)
 	{
         std::string key, value, cmd;
         std::istringstream iss(buffer);
@@ -80,10 +80,10 @@ void handleClient(int client_sock)
     }
 	else
 	{
-        close(client_sock);
-        FD_CLR(client_sock, &active_fds);
+        close(client_socket);
+        FD_CLR(client_socket, &active_fds);
     }
-    send(client_sock, output.c_str(), output.length(), 0);
+    send(client_socket, output.c_str(), output.length(), 0);
 }
 
 int main(int argc, char **argv)
