@@ -68,7 +68,6 @@ class Server
 		{
 			_filepath = filepath;
 			signal(SIGINT, Server::signalHandler);
-			loadDatabase();
 		}
 
 		~Server()
@@ -82,6 +81,7 @@ class Server
 			
 			try
 			{
+				loadDatabase();
 				_listeningSocket.bindAndListen();
 
 				while (42)
@@ -121,27 +121,47 @@ class Server
 			std::istringstream iss(request);
 			std::string command, key, value, response = "2\n";
 
-			iss >> command >> key;
+			iss >> command;;
+
 			if (command == "POST")
 			{
-				iss >> value;
-				_db[key] = value;
-				response = "0\n";
-			}
-			else if (command == "GET")
-			{
-				std::map<std::string, std::string>::iterator it = _db.find(key);
-				if (it != _db.end())
-					response = "0 " + it->second + "\n";
+				iss >> key >> value;
+				if (!key.empty() && key.length() <= 1000 && key.find_first_of(" \t\n\v\f\r") == std::string::npos &&
+            	!value.empty() && value.length() <= 1000 && value.find_first_of(" \t\n\v\f\r") == std::string::npos)
+				{
+            		_db[key] = value;
+            		response = "0\n";
+				}
 				else
 					response = "1\n";
 			}
-			else if (command == "DELETE")
+
+			if (command == "GET")
 			{
-				if (_db.erase(key) != 0)
-					response = "0\n";
+				iss >> key;
+				if (!key.empty() && key.length() <= 1000 && key.find_first_of(" \t\n\v\f\r") == std::string::npos)
+				{
+            		if (_db.find(key) != _db.end())
+                		response = "0 " + _db[key] + "\n";
+            		else
+               	 		response = "1\n";
+        		}
 				else
-					response = "1\n";
+            		response = "1\n";
+			}
+
+			if (command == "DELETE")
+			{
+				iss >> key;
+				if (!key.empty() && key.length() <= 1000 && key.find_first_of(" \t\n\v\f\r") == std::string::npos)
+				{
+            		if (_db.erase(key))
+                		response = "0\n";
+            		else
+                		response = "1\n";
+        		}	
+				else
+            		response = "1\n";
 			}
 			return response;
 		}
@@ -154,6 +174,10 @@ class Server
 		void loadDatabase()
 		{
 			std::ifstream file(_filepath.c_str());
+			 if (!file)
+        	{
+				throw std::runtime_error("Loading database failed");
+        	}
 			std::string key, value;
 			while (file >> key >> value)
 				_db[key] = value;
@@ -164,7 +188,7 @@ class Server
 			 std::ofstream file(_filepath.c_str());
 			if (!file.is_open())
 			{
-				throw std::runtime_error("Failed to open database file for saving");
+				throw std::runtime_error("Saving database failed");
 			}
 
 			for (std::map<std::string, std::string>::iterator it = _db.begin(); it != _db.end(); ++it)
