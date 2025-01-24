@@ -146,6 +146,19 @@ class Server
 			return response;
 		}
 
+	private:
+		Socket _listeningSocket;
+		static std::map<std::string, std::string> _db;
+		static std::string _filepath;
+
+		void loadDatabase()
+		{
+			std::ifstream file(_filepath.c_str());
+			std::string key, value;
+			while (file >> key >> value)
+				_db[key] = value;
+		}
+
 		static void saveDatabase()
 		{
 			 std::ofstream file(_filepath.c_str());
@@ -169,19 +182,6 @@ class Server
 				saveDatabase();
 				exit(0);
 			}    
-		}
-
-	private:
-		Socket _listeningSocket;
-		static std::map<std::string, std::string> _db;
-		static std::string _filepath;
-
-		void loadDatabase()
-		{
-			std::ifstream file(_filepath.c_str());
-			std::string key, value;
-			while (file >> key >> value)
-				_db[key] = value;
 		}
 };
 
