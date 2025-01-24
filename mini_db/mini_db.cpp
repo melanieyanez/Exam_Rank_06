@@ -1,139 +1,205 @@
 #include <iostream>
-#include <sstream>
-#include <fstream>
-#include <string>
+#include <stdexcept>
 #include <cstring>
 #include <netinet/in.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
 #include <unistd.h>
-#include <signal.h>
+
+#include <fstream>
 #include <map>
+#include <sstream>
+#include <signal.h>
 
-std::map<std::string, std::string> db;
-int server_socket, fd_max;
-fd_set active_fds, read_fds, write_fds;
-std::string filepath;
-
-void saveDatabase()
+class Socket
 {
-    std::ofstream file(filepath.c_str());
-    if (file.is_open())
-	{
-        for (std::map<std::string, std::string>::const_iterator it = db.begin(); it != db.end(); ++it)
-            file << it->first << " " << it->second << "\n";
-        file.close();
-    }
-}
-
-void loadDatabase()
-{
-    std::ifstream file(filepath);
-    std::string key, value;
-    while (file >> key >> value)
-        db[key] = value;
-}
-
-void handleSignal(int sig)
-{
-    if (sig == SIGINT) 
-	{
-        saveDatabase();
-        close(server_socket);
-        exit(0);
-    }
-}
-
-void handleClient(int client_socket)
-{
-    char buffer[1024];
-    std::string output;
-    if (recv(client_socket, buffer, sizeof(buffer), 0) > 0)
-	{
-        std::string key, value, cmd;
-        std::istringstream iss(buffer);
-
-        iss >> cmd;
-        if (cmd == "POST")
+	public:
+		Socket(int port) : _sockfd(socket(AF_INET, SOCK_STREAM, 0))
 		{
-            iss >> key >> value;
-            db[key] = value;
-            output = "0";
-        } 
-		else if (cmd == "GET")
+			if (_sockfd == -1)
+				throw std::runtime_error("Socket creation failed");
+
+			memset(&_servaddr, 0, sizeof(_servaddr));
+			_servaddr.sin_family = AF_INET;
+			_servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+			_servaddr.sin_port = htons(port);
+		}
+
+		~Socket()
 		{
-            iss >> key;
-            if (db.find(key) != db.end())
-                output = "0 " + db[key];
-            else
-                output = "1";
-        }
-		else if (cmd == "DELETE") 
+			if (_sockfd != -1)
+				close(_sockfd);
+		}
+
+		void bindAndListen()
 		{
-            if (db.erase(key))
-                output = "0";
-            else
-                output = "1";
-        }
-		else
-            output = "2";
-    }
-	else
-	{
-        close(client_socket);
-        FD_CLR(client_socket, &active_fds);
-    }
-    send(client_socket, output.c_str(), output.length(), 0);
-}
-
-int main(int argc, char **argv)
-{
-    if (argc != 3)
-	{
-        std::cerr << "Usage: " << argv[0] << " <port> <filepath>\n";
-        return(1);
-    }
-
-    filepath = argv[2];
-    loadDatabase();
-
-    struct sockaddr_in server_addr;
-    int server_socket = socket(AF_INET, SOCK_STREAM, 0);
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = htonl(2130706433);
-    server_addr.sin_port = htons(std::stoi(argv[1]));
-
-    bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr));
-    listen(server_socket, 128);
-    FD_SET(server_socket, &active_fds);
-    fd_max = server_socket;
-
-    signal(SIGINT, handleSignal);
-
-    while (42)
-	{
-        read_fds = active_fds;
-        if (select(fd_max + 1, &read_fds, nullptr, nullptr, nullptr) < 0)
-            continue;
-
-        for (int i = 0; i <= fd_max; ++i) 
-		{
-            if (FD_ISSET(i, &read_fds))
+			if (bind(_sockfd, (struct sockaddr *)&_servaddr, sizeof(_servaddr)) < 0)
 			{
-                if (i == server_socket)
+				close(_sockfd);
+				throw std::runtime_error("Bind failed");
+			}
+
+			if (listen(_sockfd, 10) < 0)
+			{
+				close(_sockfd);
+				throw std::runtime_error("Listen failed");
+			}
+		}
+
+		int acceptConnection(struct sockaddr_in &clientAddr) 
+		{
+			socklen_t addrLen = sizeof(clientAddr);
+
+			int clientSockfd = accept(_sockfd, (struct sockaddr *)&clientAddr, &addrLen);
+			if (clientSockfd < 0)
+				throw std::runtime_error("Failed to accept connection");
+			
+			return clientSockfd;
+		}
+
+	private:
+		int _sockfd;
+		struct sockaddr_in _servaddr;
+};
+
+class Server
+{
+	public:
+		Server(int port, const std::string& filepath) : _listeningSocket(port)
+		{
+			_filepath = filepath;
+			signal(SIGINT, Server::signalHandler);
+			loadDatabase();
+		}
+
+		~Server()
+		{
+			saveDatabase();
+		}
+
+		void run()
+		{
+			struct sockaddr_in clientAddr;
+			
+			try
+			{
+				_listeningSocket.bindAndListen();
+
+				while (42)
 				{
-                    int client_sock = accept(server_socket, nullptr, nullptr);
-                    if (client_sock > 0) 
-					{
-                        FD_SET(client_sock, &active_fds);
-                        if (client_sock > fd_max)
-							fd_max = client_sock;
-                    }
-                } 
+					int client_socket = _listeningSocket.acceptConnection(clientAddr);
+					handleConnection(client_socket);
+				}
+			}
+			catch (const std::exception& e)
+			{
+				std::cerr << "Error during server run: " << e.what() << std::endl;
+				exit(1);
+			}
+		}
+
+		void handleConnection(int client_socket)
+		{
+			char request[1024];
+			while (42)
+			{
+				memset(request, 0, sizeof(request));
+
+				int nbytes = recv(client_socket, request, sizeof(request) - 1, 0);
+				if (nbytes > 0)
+				{
+					request[nbytes] = '\0';
+					std::string response = processRequest(std::string(request));
+					send(client_socket, response.c_str(), response.size(), 0);
+				}
 				else
-                    handleClient(i);
-            }
-        }
-    }
-    return(0);
+					close(client_socket);
+			}
+		}
+
+		std::string processRequest(const std::string& request)
+		{
+			std::istringstream iss(request);
+			std::string command, key, value, response = "2\n";
+
+			iss >> command >> key;
+			if (command == "POST")
+			{
+				iss >> value;
+				_db[key] = value;
+				response = "0\n";
+			}
+			else if (command == "GET")
+			{
+				std::map<std::string, std::string>::iterator it = _db.find(key);
+				if (it != _db.end())
+					response = "0 " + it->second + "\n";
+				else
+					response = "1\n";
+			}
+			else if (command == "DELETE")
+			{
+				if (_db.erase(key) != 0)
+					response = "0\n";
+				else
+					response = "1\n";
+			}
+			return response;
+		}
+
+		static void saveDatabase()
+		{
+			 std::ofstream file(_filepath.c_str());
+			if (!file.is_open())
+			{
+				throw std::runtime_error("Failed to open database file for saving");
+			}
+
+			for (std::map<std::string, std::string>::iterator it = _db.begin(); it != _db.end(); ++it)
+			{
+				file << it->first << " " << it->second << "\n";
+			}
+
+			file.close();
+		}
+
+		static void signalHandler(int signum)
+		{
+			if (signum == SIGINT)
+			{
+				saveDatabase();
+				exit(0);
+			}    
+		}
+
+	private:
+		Socket _listeningSocket;
+		static std::map<std::string, std::string> _db;
+		static std::string _filepath;
+
+		void loadDatabase()
+		{
+			std::ifstream file(_filepath.c_str());
+			std::string key, value;
+			while (file >> key >> value)
+				_db[key] = value;
+		}
+};
+
+std::map<std::string, std::string> Server::_db;
+std::string Server::_filepath;
+
+int main(int argc, char** argv)
+{
+	if (argc != 3)
+	{
+		std::cout << "Usage: ./program <port> <database_file>" << std::endl;
+		return (1);
+	}
+	
+	int port = std::atoi(argv[1]);
+	
+	Server server(port, argv[2]);
+	server.run();
+
+	return (0);
 }
